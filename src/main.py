@@ -1,7 +1,5 @@
 import argparse
-import json
 import logging
-import redis
 import requests
 import structlog
 import os
@@ -10,6 +8,7 @@ import sys
 from urllib3.exceptions import InsecureRequestWarning
 from dotenv import load_dotenv
 from structlog import get_logger
+from technitium import TechnitiumDNS
 
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -49,129 +48,34 @@ def validate_environment():
         sys.exit(1)
 
 
-def add_dns_record(zone, record_name, record_type, value=None, ip=None, ttl=60):
-    if record_type == "A" or record_type == "AAAA":
-        if ip is None:
-            log.critical(
-                "Must provide an IP address for this record type",
-                record_type=record_type
-            )
-            sys.exit(1)
-
-        payload = {
-            "zone": zone,
-            "name": record_name,
-            "type": record_type,
-            "ttl": ttl,
-            "overwrite": True,
-            "rdata": [ip]
-        }
-
-    if record_type == "CNAME":
-        payload = {
-            "zone": zone,
-            "name": record_name,
-            "type": record_type,
-            "ttl": ttl,
-            "overwrite": True,
-            "rdata": value
-        }
-
-    if record_type.upper() == "TXT":
-        payload = f"{API_URL}/zones/records/add?" \
-                  f"token={API_TOKEN}" \
-                  f"&domain={record_name}.{zone}" \
-                  f"&zone={zone}" \
-                  f"&type={record_type}" \
-                  f"&text={value}"
-
-    if record_type not in VALID_RECORD_TYPES:
-        log.critical(
-            "Must select a valid record type",
-            valid_records=VALID_RECORD_TYPES
-        )
-        sys.exit(1)
-
-    log.info("Adding record to Technitium", payload=payload)
-    log.info("", payload=payload)
-    response = requests.post(payload, verify=False)
-    log.info("Add Record Response:", response=response.json())
-
-
-def delete_dns_record(zone, record, ip):
-    payload = {
-        "zone": zone,
-        "name": record,
-        "type": "A",
-        "rdata": [ip]
-    }
-    log.info("", payload=payload)
-
-    response = requests.post(f"{API_URL}/zones/records/delete", verify=False)
-    print("Delete Record Response:", response.json())
-
-
-def list_zone_records(zone):
-    response = requests.get(
-        f"{API_URL}/zones/records/get?domain={zone}&zone={zone}&token={API_TOKEN}&listZone=true",
-        verify=False
-    )
-    data = response.json()
-
-    if data.get("status") == "ok":
-        records = data.get("response", {}).get("records", [])
-        log.debug("Raw data", records=data)
-        log.info(f"Records for {zone}:")
-        for record in records:
-            log.info("Record: ", name=record["name"], type=record["type"],
-                data=record["rData"])
-    else:
-        log.warn(
-            "Failed to fetch records:",
-            status_code=response.status_code,
-            error_message=data["errorMessage"]
-        )
-
-
-def get_from_redis():
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=4)
-    if r.exists(REDIS_KEY):
-        record_dict = json.loads(r.get(REDIS_KEY))
-        record_dict["records"] = list(sum(record_dict["records"], []))
-        log.debug("specific info", received_records=record_dict["records"])
-        for entry in record_dict["records"]:
-            log.debug("", record=entry)
-        # r.delete(REDIS_KEY)
-        return record_dict
-    else:
-        log.warn("Key not found in Redis", key=REDIS_KEY)
-
-
 def run():
+    dns = TechnitiumDNS(API_URL, API_TOKEN, REDIS_HOST)
     if args.list_zone:
-        list_zone_records(args.domain)
+        dns.list_zone_records(args.domain)
 
     if args.use_redis:
-        records = get_from_redis()
+        records = dns.get_from_redis()
 
     if args.add_record:
         if args.use_redis:
             log.info("Adding record from redis", records=records["records"])
             for record in records["records"]:
                 if record["type"] == "TXT" or record["type"] == "CNAME":
-                    add_dns_record(
+                    dns.add_dns_record(
                         args.domain,
                         record["name"],
                         record["type"],
                         value=record["value"]
                     )
                 elif record["type"] == "A" or record["type"] == "AAAA":
-                    add_dns_record(args.domain, record["name"], record["type"], ip=record["value"])
+                    dns.add_dns_record(
+                        args.domain,
+                        record["name"],
+                        record["type"],
+                        ip=record["value"]
+                    )
         else:
             log.info("adding record manually")
-
-    # Delete the DNS record
-    # delete_dns_record(zone_name, record_name, record_ip)
 
 
 if __name__ == "__main__":
