@@ -27,6 +27,7 @@ API_TOKEN = os.getenv("API_TOKEN")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_KEY = os.getenv("REDIS_KEY", "dns_update")
 REDIS_PORT = os.getenv("REDIS_PORT", 6379)
+REDIS_DB = os.getenv("REDIS_DB", 4)
 VALID_RECORD_TYPES = [
     "A",
     "AAAA",
@@ -60,22 +61,21 @@ def run():
         if args.use_redis:
             log.info("Adding record from redis", records=records["records"])
             for record in records["records"]:
-                if record["type"] == "TXT" or record["type"] == "CNAME":
-                    dns.add_dns_record(
-                        args.domain,
-                        record["name"],
-                        record["type"],
-                        value=record["value"]
-                    )
-                elif record["type"] == "A" or record["type"] == "AAAA":
-                    dns.add_dns_record(
-                        args.domain,
-                        record["name"],
-                        record["type"],
-                        ip=record["value"]
-                    )
+                dns.add_dns_record(
+                    args.domain,
+                    record["name"],
+                    record["type"],
+                    record["value"]
+                )
         else:
             log.info("adding record manually")
+            log.debug("", record_type=args.record_type)
+            dns.add_dns_record(
+                args.domain,
+                args.name,
+                args.record_type,
+                args.value
+            )
 
 
 if __name__ == "__main__":
@@ -154,6 +154,7 @@ if __name__ == "__main__":
                 )
                 sys.exit(1)
             else:
+                args.record_type = args.record_type.upper()
                 if args.name is None:
                     log.critical(
                         "You must specify a name for the new record if you are using the "

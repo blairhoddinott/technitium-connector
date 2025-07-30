@@ -19,42 +19,40 @@ class TechnitiumDNS():
         "TXT"
     ]
 
-    def __init__(self, api_url, api_token, redis_host, redis_port=6379, redis_key="dns_update"):
+    def __init__(self, api_url, api_token, redis_host, redis_port=6379, redis_key="dns_update",
+                 redis_db=4):
         self.API_URL = api_url
         self.API_TOKEN = api_token
         self.REDIS_HOST = redis_host
         self.REDIS_PORT = redis_port
         self.REDIS_KEY = redis_key
+        self.REDIS_DB = redis_db
 
-    def add_dns_record(self, zone, record_name, record_type, value=None, ip=None, ttl=60):
+    def add_dns_record(self, zone, record_name, record_type, value, ttl=60):
+        if value is None:
+            log.critical(
+                "Must provide an IP address for this record type",
+                record_type=record_type
+            )
+            raise ValueError
+
         if record_type == "A" or record_type == "AAAA":
-            if ip is None:
-                log.critical(
-                    "Must provide an IP address for this record type",
-                    record_type=record_type
-                )
-                raise ValueError
-
-            payload = {
-                "zone": zone,
-                "name": record_name,
-                "type": record_type,
-                "ttl": ttl,
-                "overwrite": True,
-                "rdata": [ip]
-            }
+            payload = f"{self.API_URL}/zones/records/add" \
+                      f"?token={self.API_TOKEN}" \
+                      f"&domain={record_name}.{zone}" \
+                      f"&zone={zone}" \
+                      f"&type={record_type}" \
+                      f"&ipAddress={value}"
 
         if record_type == "CNAME":
-            payload = {
-                "zone": zone,
-                "name": record_name,
-                "type": record_type,
-                "ttl": ttl,
-                "overwrite": True,
-                "rdata": value
-            }
+            payload = f"{self.API_URL}/zones/records/add" \
+                      f"?token={self.API_TOKEN}" \
+                      f"&domain={record_name}.{zone}" \
+                      f"&zone={zone}" \
+                      f"&type={record_type}" \
+                      f"&cname={value}"
 
-        if record_type.upper() == "TXT":
+        if record_type == "TXT":
             payload = f"{self.API_URL}/zones/records/add" \
                       f"?token={self.API_TOKEN}" \
                       f"&domain={record_name}.{zone}" \
@@ -70,21 +68,24 @@ class TechnitiumDNS():
             raise ValueError
 
         log.info("Adding record to Technitium", payload=payload)
-        log.info("", payload=payload)
         response = requests.post(payload, verify=False)
-        log.info("Add Record Response:", response=response.json())
+        if response.json()["status"] != "ok":
+            log.info("Error adding record:", response=response.json())
+        else:
+            log.info("Added record", added_record=response.json()["response"]["addedRecord"])
 
-    def delete_dns_record(self, zone, record, ip):
-        payload = {
-            "zone": zone,
-            "name": record,
-            "type": "A",
-            "rdata": [ip]
-        }
-        log.info("", payload=payload)
+    # TODO:
+    # def delete_dns_record(self, zone, record, ip):
+    #     payload = {
+    #         "zone": zone,
+    #         "name": record,
+    #         "type": "A",
+    #         "rdata": [ip]
+    #     }
+    #     log.info("", payload=payload)
 
-        response = requests.post(f"{self.API_URL}/zones/records/delete", verify=False)
-        log.info("Delete Record Response:", response.json())
+    #     response = requests.post(f"{self.API_URL}/zones/records/delete", verify=False)
+    #     log.info("Delete Record Response:", response.json())
 
     def list_zone_records(self, zone):
         response = requests.get(
@@ -112,14 +113,13 @@ class TechnitiumDNS():
             )
 
     def get_from_redis(self):
-        r = redis.Redis(host=self.REDIS_HOST, port=self.REDIS_PORT, db=4)
+        r = redis.Redis(host=self.REDIS_HOST, port=self.REDIS_PORT, db=self.REDIS_DB)
         if r.exists(self.REDIS_KEY):
             record_dict = json.loads(r.get(self.REDIS_KEY))
             record_dict["records"] = list(sum(record_dict["records"], []))
             log.debug("specific info", received_records=record_dict["records"])
             for entry in record_dict["records"]:
                 log.debug("", record=entry)
-            # r.delete(self.REDIS_KEY)
             return record_dict
         else:
             log.warn("Key not found in Redis", key=self.REDIS_KEY)
