@@ -74,18 +74,38 @@ class TechnitiumDNS():
         else:
             log.info("Added record", added_record=response.json()["response"]["addedRecord"])
 
-    # TODO:
-    # def delete_dns_record(self, zone, record, ip):
-    #     payload = {
-    #         "zone": zone,
-    #         "name": record,
-    #         "type": "A",
-    #         "rdata": [ip]
-    #     }
-    #     log.info("", payload=payload)
+    def delete_dns_record(self, zone, record_name, record_type, value):
+        if record_type == "A" or record_type == "AAAA":
+            payload = f"{self.API_URL}/zones/records/delete" \
+                      f"?token={self.API_TOKEN}" \
+                      f"&domain={record_name}.{zone}" \
+                      f"&zone={zone}" \
+                      f"&type={record_type}" \
+                      f"&ipAddress={value}"
 
-    #     response = requests.post(f"{self.API_URL}/zones/records/delete", verify=False)
-    #     log.info("Delete Record Response:", response.json())
+        if record_type == "CNAME":
+            payload = f"{self.API_URL}/zones/records/delete" \
+                      f"?token={self.API_TOKEN}" \
+                      f"&domain={record_name}.{zone}" \
+                      f"&zone={zone}" \
+                      f"&type={record_type}" \
+                      f"&cname={value}"
+
+        if record_type == "TXT":
+            payload = f"{self.API_URL}/zones/records/delete" \
+                      f"?token={self.API_TOKEN}" \
+                      f"&domain={record_name}.{zone}" \
+                      f"&zone={zone}" \
+                      f"&type={record_type}" \
+                      f"&text={value}"
+
+        log.debug("", payload=payload)
+
+        response = requests.post(payload, verify=False)
+        if response.json()["status"] != "ok":
+            log.info("Error deleting record:", response=response.json())
+        else:
+            log.info("Removed record")
 
     def list_zone_records(self, zone):
         response = requests.get(
@@ -96,7 +116,10 @@ class TechnitiumDNS():
             f"&listZone=true",
             verify=False
         )
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as e:
+            log.critical("Unable to process response", exception=e, response=response)
 
         if data.get("status") == "ok":
             records = data.get("response", {}).get("records", [])

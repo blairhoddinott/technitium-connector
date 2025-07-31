@@ -50,6 +50,8 @@ def validate_environment():
 
 
 def run():
+    validate_environment()
+
     dns = TechnitiumDNS(API_URL, API_TOKEN, REDIS_HOST)
     if args.list_zone:
         dns.list_zone_records(args.domain)
@@ -76,6 +78,15 @@ def run():
                 args.record_type,
                 args.value
             )
+
+    if args.remove_record:
+        log.info("Deleting record from DNS")
+        dns.delete_dns_record(
+            args.domain,
+            args.name,
+            args.record_type,
+            args.value
+        )
 
 
 if __name__ == "__main__":
@@ -128,6 +139,12 @@ if __name__ == "__main__":
              "If this is not set, all record types will be returned"
     )
     parser.add_argument(
+        "-x",
+        "--remove_record",
+        action="store_true",
+        help="Use this flag to set a record up for removal"
+    )
+    parser.add_argument(
         "-v",
         "--debug",
         action="store_true",
@@ -144,6 +161,14 @@ if __name__ == "__main__":
     else:
         structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),)
 
+    if args.record_type:
+        args.record_type = args.record_type.upper()
+
+    if args.add_record and args.remove_record:
+        log.critical("You must not use the -a and -x flag at the same time. "
+                     "Either add OR delete, but not both")
+        sys.exit(1)
+
     if args.add_record:
         if args.use_redis:
             log.debug("Loading records from Redis to be added")
@@ -154,7 +179,6 @@ if __name__ == "__main__":
                 )
                 sys.exit(1)
             else:
-                args.record_type = args.record_type.upper()
                 if args.name is None:
                     log.critical(
                         "You must specify a name for the new record if you are using the "
