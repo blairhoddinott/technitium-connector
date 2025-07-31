@@ -58,14 +58,19 @@ def run():
         records = dns.get_from_redis()
         if records:
             log.debug("Record found in redis", records=records["records"])
-            if dns.check_for_dns_record(args.domain, "test", "TXT", None):
-                log.info("Running validation check")
-                if dns.check_for_validation_complete():
-                    log.info(
-                        "Validation complete, removing TXT record from DNS",
-                        record=records["records"]
-                    )
-                    for record in records["records"]:
+            for record in records["records"]:
+                if dns.check_for_dns_record(
+                    args.domain,
+                    record["name"],
+                    record["type"],
+                    record["value"]
+                ):
+                    log.info("DNS record found, Running validation check")
+                    if dns.check_for_validation_complete():
+                        log.info(
+                            "Validation complete, removing TXT record from DNS",
+                            record=record
+                        )
                         if dns.delete_dns_record(args.domain, record["name"], record["type"],
                                                 record["value"]):
                             log.info("Removing record from redis")
@@ -73,19 +78,21 @@ def run():
                                 log.info("Records removed, validation loop completed.")
                         else:
                             log.warn("error removing DNS record")
+                    else:
+                        log.debug(
+                            "Validation in progress or otherwise not ready to clean out records"
+                        )
                 else:
-                    log.debug("Validation in progress or otherwise not ready to clean out records")
-            else:
-                log.info("Adding record from redis", records=records["records"])
-                for record in records["records"]:
-                    dns.add_dns_record(
-                        args.domain,
-                        record["name"],
-                        record["type"],
-                        record["value"]
-                    )
+                    log.info("Adding record from redis", records=records["records"])
+                    for record in records["records"]:
+                        dns.add_dns_record(
+                            args.domain,
+                            record["name"],
+                            record["type"],
+                            record["value"]
+                        )
 
-        time.sleep(300)
+        time.sleep(60)
 
 
 if __name__ == "__main__":
