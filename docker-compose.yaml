@@ -1,0 +1,11 @@
+---
+services:
+  technitium-connector:
+    image: weepyadmin/technitium-connector:latest
+    container_name: technitium-connector
+    environment:
+      - DOMAIN=DOMAIN.COM
+      - API_URL=https://TECHNITIUM.SERVER.FQDN/api
+      - API_TOKEN=TECHNITIUM_API_KEY
+      - REDIS_HOST=REDIS_SERVER
+    restart: always
