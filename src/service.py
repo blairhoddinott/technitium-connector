@@ -92,7 +92,7 @@ def run():
                             record["value"]
                         )
 
-        time.sleep(60)
+        time.sleep(300)
 
 
 if __name__ == "__main__":
