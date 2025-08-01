@@ -1,0 +1,15 @@
+[Unit]
+Description=Technitium DNS Connector
+After=network.target
+
+[Service]
+User=blair
+Group=sudo
+WorkingDirectory=/opt/technitium-connector
+ExecStart=/opt/technitium-connector/.venv/bin/python /opt/technitium-connector/src/service.py -d weepynet.com
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
