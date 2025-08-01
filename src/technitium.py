@@ -188,7 +188,7 @@ class TechnitiumDNS():
 
     def check_for_validation_complete(self):
         """
-        This function checks the redis key for validation completion. 
+        This function checks the redis key for validation completion.
         If this is set to true, it will delete the record in DNS and then unset the redis keys.
         This is part of my split-brain DNS validation issue, not likely to be of use to others
         """
